@@ -1,0 +1,922 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model users {
+  id                              String                          @id @db.Uuid
+  email                           String?
+  full_name                       String?
+  avatar_url                      String?
+  role                            UserRole                        @default(CUSTOMER)
+  stripe_customer_id              String?                         @unique
+  phone_number                    String?
+  expo_push_token                 String?
+  is_push_notification            Boolean?                        @default(false)
+  carts                           cart[]
+  buyer_chats                     chat_conversations[]            @relation("BuyerConversations")
+  seller_chats                    chat_conversations[]            @relation("SellerConversations")
+  chat_messages                   chat_messages[]
+  customer_addresses              customer_addresses[]
+  delivery_applications_reviewed  delivery_partner_applications[] @relation("ReviewerDeliveryApplications")
+  delivery_applications_submitted delivery_partner_applications[] @relation("UserDeliveryApplications")
+  delivery_partner_profiles       delivery_partner_profiles[]
+  item_likes                      item_likes[]
+  order_events                    order_events[]
+  orders                          orders[]
+  buyer_orders                    p2p_orders[]                    @relation("BuyerOrders")
+  seller_orders                   p2p_orders[]                    @relation("SellerOrders")
+  applications_reviewed           partner_applications[]          @relation("ReviewerApplications")
+  applications_submitted          partner_applications[]          @relation("UserApplications")
+  payment_fees                    payment_fees[]                  @relation("UserPaymentFees")
+  payment_methods                 payment_methods[]
+  customer_payments               payments[]                      @relation("CustomerPayments")
+  delivery_partner_payments       payments[]                      @relation("DeliveryPartnerPayments")
+  payments_made                   payments[]                      @relation("UserPayments")
+  product_likes                   product_likes[]
+  shops                           shops[]
+  old_assignee_tasks              task_history[]                  @relation("OldAssignee")
+  new_assignee_tasks              task_history[]                  @relation("NewAssignee")
+  changed_tasks                   task_history[]
+  task_templates                  task_templates[]
+  assigned_tasks                  tasks[]                         @relation("AssignedTasks")
+  created_tasks                   tasks[]                         @relation("CreatedTasks")
+  submitted_offers                user_item_offers[]
+  listed_items                    user_items[]
+  profile                         user_profile?
+
+  @@index([role])
+}
+
+model user_profile {
+  id            String   @id @db.Uuid
+  user_id       String   @unique @db.Uuid
+  username      String?  @unique
+  bio           String?
+  website       String?
+  social_links  Json?
+  location      String?
+  display_email Boolean  @default(false)
+  display_phone Boolean  @default(false)
+  is_public     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @updatedAt @db.Timestamptz(6)
+  user          users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model partner_applications {
+  id                           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                      String?                  @db.Uuid
+  business_name                String
+  business_description         String?
+  business_address             String
+  business_phone               String
+  business_email               String
+  business_registration_number String?
+  business_type                String
+  contact_person_name          String
+  contact_person_position      String
+  social_media_links           Json?
+  documents                    Json?
+  status                       PartnerApplicationStatus @default(DRAFT)
+  submitted_at                 DateTime?                @db.Timestamptz(6)
+  reviewed_by                  String?                  @db.Uuid
+  reviewed_at                  DateTime?                @db.Timestamptz(6)
+  rejection_reason             String?
+  notes                        String[]
+  created_at                   DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?                @default(now()) @db.Timestamptz(6)
+  application_number           String                   @unique @default(dbgenerated("('APP-'::text || lpad((nextval('partner_application_number_seq'::regclass))::text, 7, '0'::text))"))
+  reviewer                     users?                   @relation("ReviewerApplications", fields: [reviewed_by], references: [id])
+  user                         users?                   @relation("UserApplications", fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model shops {
+  id                    String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id              String?              @db.Uuid
+  name                  String
+  description           String?
+  address               String
+  coordinates           Json?
+  phone                 String?
+  business_hours        Json?
+  logo_url              String?
+  status                ShopStatus           @default(PENDING)
+  created_at            DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?            @default(now()) @db.Timestamptz(6)
+  onboarding_completed  Boolean              @default(false)
+  stripe_account_id     String?              @unique
+  stripe_account_status StripeAccountStatus? @default(PENDING)
+  products              products[]
+  owner                 users?               @relation(fields: [owner_id], references: [id])
+  tasks                 tasks[]
+
+  @@index([owner_id])
+  @@index([status])
+}
+
+model products {
+  id                  String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shop_id             String?                 @db.Uuid
+  name                String
+  description         String?
+  price               Decimal                 @db.Decimal(10, 2)
+  sale_price          Decimal?                @db.Decimal(10, 2)
+  cost_price          Decimal?                @db.Decimal(10, 2)
+  sku                 String?                 @unique
+  stock_quantity      Int                     @default(0)
+  low_stock_threshold Int?                    @default(5)
+  is_available        Boolean?                @default(true)
+  images              Json?
+  created_at          DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?               @default(now()) @db.Timestamptz(6)
+  gender              ProductGender           @default(UNISEX)
+  category            ProductCategory
+  subcategory         String
+  cart_items          cart_item[]
+  orders              order_items[]
+  likes               product_likes[]
+  specifications      product_specifications?
+  shop                shops?                  @relation(fields: [shop_id], references: [id])
+
+  @@index([shop_id])
+}
+
+model product_specifications {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  product_id      String    @unique @db.Uuid
+  available_sizes String[]
+  colors          String[]
+  materials       String[]
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  height          String?
+  length          String?
+  width           String?
+  product         products  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@index([product_id])
+}
+
+model product_likes {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  product_id String    @db.Uuid
+  user_id    String    @db.Uuid
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  product    products  @relation(fields: [product_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_product")
+  user       users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_user")
+
+  @@unique([product_id, user_id], map: "unique_product_user")
+  @@index([product_id])
+  @@index([user_id])
+}
+
+model delivery_partner_applications {
+  id                      String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String?                          @db.Uuid
+  full_name               String
+  date_of_birth           DateTime                         @db.Date
+  phone_number            String
+  email                   String
+  address                 String
+  vehicle_type            VehicleType
+  vehicle_make            String?
+  vehicle_model           String?
+  vehicle_year            Int?
+  vehicle_plate_number    String?
+  drivers_license_number  String?
+  drivers_license_expiry  DateTime?                        @db.Date
+  has_delivery_experience Boolean                          @default(false)
+  years_of_experience     Int?
+  previous_companies      String[]
+  preferred_work_areas    String[]
+  available_hours         Json?
+  status                  DeliveryPartnerApplicationStatus @default(DRAFT)
+  submitted_at            DateTime?                        @db.Timestamptz(6)
+  reviewed_by             String?                          @db.Uuid
+  reviewed_at             DateTime?                        @db.Timestamptz(6)
+  rejection_reason        String?
+  notes                   String[]
+  documents               Json?
+  created_at              DateTime                         @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime?                        @default(now()) @db.Timestamptz(6)
+  application_number      String                           @unique @default(dbgenerated("('DEL-'::text || lpad((nextval('delivery_partner_application_number_seq'::regclass))::text, 7, '0'::text))"))
+  reviewer                users?                           @relation("ReviewerDeliveryApplications", fields: [reviewed_by], references: [id])
+  user                    users?                           @relation("UserDeliveryApplications", fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model delivery_partner_profiles {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  partner_id             String                @db.Uuid
+  status                 DeliveryPartnerStatus @default(ACTIVE)
+  vehicle_type           String
+  vehicle_make           String?
+  vehicle_model          String?
+  vehicle_year           Int?
+  vehicle_plate_number   String?
+  drivers_license_number String?
+  drivers_license_expiry DateTime?             @db.Timestamptz(6)
+  preferred_work_areas   String[]
+  available_hours        Json?
+  rating                 Decimal               @default(0.00) @db.Decimal(3, 2)
+  total_deliveries       Int                   @default(0)
+  created_at             DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime              @default(now()) @db.Timestamptz(6)
+  partner                users                 @relation(fields: [partner_id], references: [id])
+  tasks                  tasks[]
+
+  @@index([partner_id])
+  @@index([status])
+  @@index([vehicle_type])
+}
+
+model cart {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String      @db.Uuid
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at DateTime    @default(now()) @db.Timestamptz(6)
+  user       users       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  items      cart_item[]
+
+  @@index([user_id])
+}
+
+model cart_item {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cart_id    String   @db.Uuid
+  product_id String   @db.Uuid
+  quantity   Int      @default(1)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  cart       cart     @relation(fields: [cart_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product    products @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([cart_id, product_id], map: "unique_cart_product")
+  @@index([cart_id])
+  @@index([product_id])
+}
+
+model customer_addresses {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  full_name     String
+  phone_number  String
+  address_line1 String
+  address_line2 String?
+  city          String
+  state         String
+  postal_code   String
+  country       String
+  is_default    Boolean  @default(false)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  user          users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  orders        orders[]
+
+  @@index([user_id])
+}
+
+model payment_methods {
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                  String              @db.Uuid
+  stripe_payment_method_id String              @unique
+  type                     PaymentMethodType
+  last4                    String?
+  exp_month                Int?
+  exp_year                 Int?
+  card_brand               String?
+  is_default               Boolean             @default(false)
+  created_at               DateTime            @default(now()) @db.Timestamptz(6)
+  archived_at              DateTime?           @db.Timestamptz(6)
+  status                   PaymentMethodStatus @default(ACTIVE)
+  updated_at               DateTime            @default(now()) @db.Timestamptz(6)
+  user                     users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  payments                 payments[]
+
+  @@index([user_id])
+}
+
+model orders {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String             @db.Uuid
+  address_id       String             @db.Uuid
+  subtotal         Decimal            @db.Decimal(10, 2)
+  delivery_fee     Decimal            @db.Decimal(10, 2)
+  total            Decimal            @db.Decimal(10, 2)
+  notes            String?
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  status           OrderEventStatus   @default(ORDER_PLACED)
+  order_events     order_events[]
+  order_items      order_items[]
+  delivery_address customer_addresses @relation(fields: [address_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user             users              @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment          payments?
+  tasks            tasks[]
+
+  @@index([user_id])
+  @@index([status])
+}
+
+model order_items {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id   String   @db.Uuid
+  product_id String   @db.Uuid
+  quantity   Int
+  unit_price Decimal  @db.Decimal(10, 2)
+  subtotal   Decimal  @db.Decimal(10, 2)
+  order      orders   @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product    products @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([order_id])
+  @@index([product_id])
+}
+
+model order_events {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id    String           @db.Uuid
+  event_type  OrderEventStatus
+  description String?
+  metadata    Json?
+  created_by  String?          @db.Uuid
+  location    Json?
+  created_at  DateTime         @default(now()) @db.Timestamptz(6)
+  creator     users?           @relation(fields: [created_by], references: [id], onUpdate: NoAction)
+  orders      orders           @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([event_type])
+  @@index([order_id])
+}
+
+model transactions {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payment_id     String?         @db.Uuid
+  type           TransactionType
+  amount         Decimal         @db.Decimal(10, 2)
+  currency       String          @default("USD")
+  status         PaymentStatus
+  provider       PaymentProvider @default(STRIPE)
+  provider_tx_id String?
+  metadata       Json?
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime        @default(now()) @db.Timestamptz(6)
+  payment        payments?       @relation(fields: [payment_id], references: [id])
+
+  @@index([payment_id])
+  @@index([type])
+  @@index([status])
+  @@index([provider_tx_id])
+}
+
+model payments {
+  id                     String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id               String?         @unique @db.Uuid
+  payment_method_id      String          @db.Uuid
+  amount                 Decimal         @db.Decimal(10, 2)
+  currency               String          @default("USD")
+  status                 PaymentStatus   @default(PENDING)
+  error_message          String?
+  created_at             DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime        @default(now()) @db.Timestamptz(6)
+  p2p_order_id           String?         @unique @db.Uuid
+  customer_id            String          @db.Uuid
+  delivery_partner_id    String?         @db.Uuid
+  metadata               Json?
+  provider               PaymentProvider
+  provider_client_secret String?
+  provider_payment_id    String?         @unique
+  refunded_amount        Decimal?        @db.Decimal(10, 2)
+  user_id                String          @db.Uuid
+  payment_type           PaymentType     @default(SHOP_ORDER)
+  fees                   payment_fees?
+  customer               users           @relation("CustomerPayments", fields: [customer_id], references: [id])
+  delivery_partner       users?          @relation("DeliveryPartnerPayments", fields: [delivery_partner_id], references: [id])
+  order                  orders?         @relation(fields: [order_id], references: [id])
+  p2p_order              p2p_orders?     @relation(fields: [p2p_order_id], references: [id])
+  payment_method         payment_methods @relation(fields: [payment_method_id], references: [id])
+  user                   users           @relation("UserPayments", fields: [user_id], references: [id])
+  transactions           transactions[]
+
+  @@index([status])
+  @@index([payment_type])
+  @@index([provider])
+  @@index([user_id])
+  @@index([customer_id])
+  @@index([delivery_partner_id])
+}
+
+model payment_fees {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  payment_id              String    @unique @db.Uuid
+  platform_fee_amount     Decimal   @db.Decimal(10, 2)
+  platform_fee_percentage Decimal   @db.Decimal(5, 2)
+  shop_fee_amount         Decimal   @db.Decimal(10, 2)
+  shop_fee_percentage     Decimal   @db.Decimal(5, 2)
+  shop_transfer_id        String?   @unique
+  shop_payout_id          String?
+  shop_account_id         String?
+  delivery_fee_amount     Decimal?  @db.Decimal(10, 2)
+  delivery_fee_percentage Decimal?  @db.Decimal(5, 2)
+  delivery_transfer_id    String?   @unique
+  delivery_payout_id      String?
+  delivery_partner_id     String?   @db.Uuid
+  tax_amount              Decimal?  @db.Decimal(10, 2)
+  tax_details             Json?
+  payout_schedule_date    DateTime? @db.Timestamptz(6)
+  metadata                Json?
+  created_at              DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime  @default(now()) @db.Timestamptz(6)
+  delivery_partner        users?    @relation("UserPaymentFees", fields: [delivery_partner_id], references: [id])
+  payment                 payments  @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+
+  @@index([shop_account_id])
+  @@index([delivery_partner_id])
+}
+
+model fee_configurations {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  platform_fee_percentage Decimal  @db.Decimal(5, 2)
+  shop_fee_percentage     Decimal  @db.Decimal(5, 2)
+  delivery_fee_percentage Decimal  @db.Decimal(5, 2)
+  minimum_payout_amount   Decimal  @db.Decimal(10, 2)
+  payout_schedule_days    Int[]
+  is_active               Boolean  @default(true)
+  effective_from          DateTime @db.Timestamptz(6)
+  created_at              DateTime @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([is_active])
+  @@index([effective_from])
+}
+
+model payout_batches {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batch_date      DateTime     @db.Timestamptz(6)
+  status          PayoutStatus @default(PENDING)
+  total_amount    Decimal      @db.Decimal(10, 2)
+  recipient_count Int
+  processed_count Int          @default(0)
+  error_count     Int          @default(0)
+  metadata        Json?
+  created_at      DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime     @default(now()) @db.Timestamptz(6)
+
+  @@index([batch_date])
+  @@index([status])
+}
+
+model user_items {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  seller_id     String               @db.Uuid
+  name          String
+  description   String?
+  condition     ItemCondition
+  price         Decimal              @db.Decimal(10, 2)
+  status        ItemStatus           @default(DRAFT)
+  images        Json?
+  brand         String?
+  size          String?
+  color         String?
+  is_negotiable Boolean?             @default(true)
+  location      Json?
+  created_at    DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?            @default(now()) @db.Timestamptz(6)
+  height        String?
+  length        String?
+  materials     String[]
+  width         String?
+  conversations chat_conversations[]
+  likes         item_likes[]
+  orders        p2p_orders[]
+  offers        user_item_offers[]
+  seller        users                @relation(fields: [seller_id], references: [id])
+
+  @@index([seller_id])
+  @@index([status])
+}
+
+model p2p_orders {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  item_id             String            @db.Uuid
+  buyer_id            String            @db.Uuid
+  seller_id           String            @db.Uuid
+  accepted_offer_id   String?           @db.Uuid
+  status              P2POrderStatus    @default(PENDING_PAYMENT)
+  total_amount        Decimal           @db.Decimal(10, 2)
+  delivery_method     DeliveryMethod
+  delivery_address    Json?
+  tracking_number     String?
+  cancellation_reason String?
+  created_at          DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
+  accepted_offer      user_item_offers? @relation(fields: [accepted_offer_id], references: [id])
+  buyer               users             @relation("BuyerOrders", fields: [buyer_id], references: [id])
+  item                user_items        @relation(fields: [item_id], references: [id])
+  seller              users             @relation("SellerOrders", fields: [seller_id], references: [id])
+  payment             payments?
+
+  @@index([item_id])
+  @@index([buyer_id, seller_id])
+}
+
+model user_item_offers {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  item_id      String          @db.Uuid
+  buyer_id     String          @db.Uuid
+  offer_amount Decimal         @db.Decimal(10, 2)
+  status       OfferStatus     @default(PENDING)
+  message      String?
+  valid_until  DateTime?       @db.Timestamptz(6)
+  created_at   DateTime?       @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime?       @default(now()) @db.Timestamptz(6)
+  messages     chat_messages[]
+  order        p2p_orders[]
+  buyer        users           @relation(fields: [buyer_id], references: [id])
+  item         user_items      @relation(fields: [item_id], references: [id])
+
+  @@index([item_id])
+  @@index([buyer_id])
+}
+
+model item_likes {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  item_id    String     @db.Uuid
+  user_id    String     @db.Uuid
+  created_at DateTime?  @default(now()) @db.Timestamptz(6)
+  item       user_items @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  user       users      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([item_id, user_id])
+  @@index([item_id])
+  @@index([user_id])
+}
+
+model chat_conversations {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  item_id         String                 @db.Uuid
+  buyer_id        String                 @db.Uuid
+  seller_id       String                 @db.Uuid
+  status          ChatConversationStatus @default(ACTIVE)
+  last_message_at DateTime?              @default(now()) @db.Timestamptz(6)
+  created_at      DateTime?              @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?              @default(now()) @db.Timestamptz(6)
+  buyer           users                  @relation("BuyerConversations", fields: [buyer_id], references: [id])
+  item            user_items             @relation(fields: [item_id], references: [id])
+  seller          users                  @relation("SellerConversations", fields: [seller_id], references: [id])
+  messages        chat_messages[]
+
+  @@index([buyer_id, seller_id])
+}
+
+model chat_messages {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id String             @db.Uuid
+  sender_id       String             @db.Uuid
+  message_type    ChatMessageType
+  content         String
+  is_read         Boolean?           @default(false)
+  offer_id        String?            @db.Uuid
+  created_at      DateTime?          @default(now()) @db.Timestamptz(6)
+  conversation    chat_conversations @relation(fields: [conversation_id], references: [id])
+  offer           user_item_offers?  @relation(fields: [offer_id], references: [id])
+  sender          users              @relation(fields: [sender_id], references: [id])
+
+  @@index([conversation_id])
+}
+
+model tasks {
+  id                  String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title               String
+  description         String?
+  status              TaskStatus                 @default(TODO)
+  label               TaskLabel
+  priority            TaskPriority               @default(MEDIUM)
+  created_at          DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime                   @default(now()) @db.Timestamptz(6)
+  due_date            DateTime?                  @db.Timestamptz(6)
+  created_by          String                     @db.Uuid
+  assigned_to         String?                    @db.Uuid
+  related_order_id    String?                    @db.Uuid
+  related_shop_id     String?                    @db.Uuid
+  related_delivery_id String?                    @db.Uuid
+  metadata            Json?
+  history             task_history[]
+  assignee            users?                     @relation("AssignedTasks", fields: [assigned_to], references: [id])
+  creator             users                      @relation("CreatedTasks", fields: [created_by], references: [id])
+  delivery_profile    delivery_partner_profiles? @relation(fields: [related_delivery_id], references: [id])
+  order               orders?                    @relation(fields: [related_order_id], references: [id])
+  shop                shops?                     @relation(fields: [related_shop_id], references: [id])
+
+  @@index([status])
+  @@index([label])
+  @@index([created_by])
+  @@index([assigned_to])
+  @@index([related_order_id])
+  @@index([related_shop_id])
+  @@index([related_delivery_id])
+}
+
+model task_history {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  task_id       String        @db.Uuid
+  changed_by    String        @db.Uuid
+  changed_at    DateTime      @default(now()) @db.Timestamptz(6)
+  status_from   TaskStatus?
+  status_to     TaskStatus?
+  priority_from TaskPriority?
+  priority_to   TaskPriority?
+  assigned_from String?       @db.Uuid
+  assigned_to   String?       @db.Uuid
+  notes         String?
+  old_assignee  users?        @relation("OldAssignee", fields: [assigned_from], references: [id])
+  new_assignee  users?        @relation("NewAssignee", fields: [assigned_to], references: [id])
+  changer       users         @relation(fields: [changed_by], references: [id])
+  task          tasks         @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@index([task_id])
+}
+
+model task_templates {
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title_template       String
+  description_template String?
+  task_type            String
+  priority             TaskPriority @default(MEDIUM)
+  label                TaskLabel
+  metadata_template    Json?
+  created_at           DateTime     @default(now()) @db.Timestamptz(6)
+  created_by           String?      @db.Uuid
+  is_system_template   Boolean      @default(false)
+  creator              users?       @relation(fields: [created_by], references: [id])
+
+  @@index([task_type])
+  @@index([label])
+}
+
+enum UserRole {
+  CUSTOMER
+  SHOP_OWNER
+  DELIVERY_PARTNER
+  INTERNAL_OPERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum PartnerApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ShopStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProductGender {
+  MEN
+  WOMEN
+  UNISEX
+  KIDS
+}
+
+enum ProductCategory {
+  CLOTHING
+  SHOES
+  ACCESSORIES
+  DESIGNER
+  STREETWEAR
+  SPORTS
+}
+
+enum DeliveryPartnerApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum VehicleType {
+  BICYCLE
+  MOTORCYCLE
+  CAR
+  VAN
+}
+
+enum DeliveryPartnerStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethodType {
+  CARD
+  IDEAL
+  BANCONTACT
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_PICKUP
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderEventStatus {
+  ORDER_PLACED
+  PAYMENT_PENDING
+  PAYMENT_COMPLETED
+  ORDER_CONFIRMED
+  PREPARATION_STARTED
+  READY_FOR_PICKUP
+  PICKUP_COMPLETED
+  OUT_FOR_DELIVERY
+  DELIVERY_ATTEMPTED
+  DELIVERED
+  CANCELLED
+  REFUND_REQUESTED
+  REFUND_PROCESSED
+}
+
+enum ItemCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum ItemStatus {
+  DRAFT
+  PUBLISHED
+  SOLD
+  ARCHIVED
+}
+
+enum P2POrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_CONFIRMED
+  READY_FOR_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryMethod {
+  SHIPPING
+  LOCAL_PICKUP
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum ChatMessageType {
+  TEXT
+  IMAGE
+  OFFER
+  PENDING_PAYMENT
+}
+
+enum ChatConversationStatus {
+  ACTIVE
+  ARCHIVED
+  BLOCKED
+}
+
+enum PaymentMethodStatus {
+  ACTIVE
+  ARCHIVED
+  EXPIRED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskLabel {
+  SHOP_MANAGEMENT
+  ORDER_MANAGEMENT
+  DELIVERY_MANAGEMENT
+  CUSTOMER_SERVICE
+  PLATFORM_ISSUE
+  SUPPORT
+  INVENTORY
+  BUG
+  FEATURE
+  USER_MANAGEMENT
+  NEW_ORDER
+  DELIVERY_PICKUP
+  DELIVERY_ISSUE
+}
+
+enum StripeAccountStatus {
+  PENDING
+  ACTIVE
+  DEAUTHORIZED
+  UPDATED
+  RESTRICTED
+}
+
+enum TransferStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REVERSED
+}
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum PaymentType {
+  SHOP_ORDER
+  P2P_ORDER
+  REFUND
+  PAYOUT
+  ADJUSTMENT
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  BANK_TRANSFER
+  OTHER
+}
+
+enum TransactionType {
+  CHARGE
+  REFUND
+  PAYOUT
+  PAYOUT_REVERSAL
+  FEE
+  ADJUSTMENT
+}
+
+enum NotificationType {
+  PUSH
+  EMAIL
+  BOTH
+}
+
+model notifications {
+  id           String           @id @default(uuid()) @db.Uuid
+  title        String
+  body         String
+  type         NotificationType @default(PUSH)
+  sent         Boolean          @default(false)
+  target_users String[]         @default([]) @db.Uuid
+  created_at   DateTime         @default(now())
+  updated_at   DateTime         @updatedAt
+}
